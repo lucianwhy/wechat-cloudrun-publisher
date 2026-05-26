@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const fs = require("fs");
+const https = require("https");
 const os = require("os");
 const path = require("path");
 
@@ -20,11 +21,24 @@ const ENABLE_COMMENT = String(process.env.WECHAT_ENABLE_COMMENT || "true") === "
 const ONLY_FANS_CAN_COMMENT = String(process.env.WECHAT_ONLY_FANS_CAN_COMMENT || "false") === "true";
 const ENABLE_ORIGINAL_DECLARATION =
   String(process.env.WECHAT_ENABLE_ORIGINAL_DECLARATION || "true") === "true";
+const ALLOW_SELF_SIGNED_TLS = String(process.env.ALLOW_SELF_SIGNED_TLS || "false") === "true";
 
 marked.setOptions({
   gfm: true,
   breaks: false,
 });
+
+const insecureHttpsAgent = new https.Agent({
+  rejectUnauthorized: !ALLOW_SELF_SIGNED_TLS,
+});
+
+function axiosRequest(config) {
+  return axios({
+    proxy: false,
+    httpsAgent: insecureHttpsAgent,
+    ...config,
+  });
+}
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -66,7 +80,9 @@ function normalizeHtml(html) {
 async function fetchAccessToken() {
   const appid = requireEnv("WECHAT_APPID");
   const secret = requireEnv("WECHAT_SECRET");
-  const response = await axios.get("https://api.weixin.qq.com/cgi-bin/token", {
+  const response = await axiosRequest({
+    method: "get",
+    url: "https://api.weixin.qq.com/cgi-bin/token",
     params: {
       grant_type: "client_credential",
       appid,
@@ -96,7 +112,9 @@ async function resolveImageBuffer({ imageUrl, imageBase64 }) {
     return Buffer.from(imageBase64.replace(/^data:.+;base64,/, ""), "base64");
   }
   if (imageUrl) {
-    const response = await axios.get(imageUrl, {
+    const response = await axiosRequest({
+      method: "get",
+      url: imageUrl,
       responseType: "arraybuffer",
       timeout: 60000,
     });
@@ -130,7 +148,10 @@ async function cropCoverToWechat(buffer) {
 async function uploadMultipart(url, filePath, field = "media") {
   const form = new FormData();
   form.append(field, fs.createReadStream(filePath));
-  const response = await axios.post(url, form, {
+  const response = await axiosRequest({
+    method: "post",
+    url,
+    data: form,
     headers: form.getHeaders(),
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
@@ -195,16 +216,15 @@ async function replaceRemoteImages(accessToken, html) {
 }
 
 async function createDraft(accessToken, payload) {
-  const response = await axios.post(
-    `https://api.weixin.qq.com/cgi-bin/draft/add?access_token=${accessToken}`,
-    payload,
-    {
-      timeout: 60000,
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-      },
-    }
-  );
+  const response = await axiosRequest({
+    method: "post",
+    url: `https://api.weixin.qq.com/cgi-bin/draft/add?access_token=${accessToken}`,
+    data: payload,
+    timeout: 60000,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+    },
+  });
 
   return response.data;
 }

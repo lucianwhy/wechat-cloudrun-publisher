@@ -62,6 +62,13 @@
 - `WECHAT_ENABLE_COMMENT`
 - `WECHAT_ONLY_FANS_CAN_COMMENT`
 - `WECHAT_ENABLE_ORIGINAL_DECLARATION`
+- `ALLOW_SELF_SIGNED_TLS`
+
+如果云托管环境里对外 HTTPS 请求出现 `self-signed certificate`，可以临时把：
+
+- `ALLOW_SELF_SIGNED_TLS=true`
+
+作为兜底开关使用。正常情况下还是建议保持 `false`。
 
 ## 云托管部署
 
